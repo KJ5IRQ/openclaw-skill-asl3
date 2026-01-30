@@ -1,0 +1,28 @@
+# ASL Agent Configuration
+
+ami:
+  host: "127.0.0.1"
+  port: 5038
+  username: "asl-agent"
+  password: "YOUR_AMI_PASSWORD_HERE"  # From /etc/asterisk/manager.conf
+
+node:
+  number: "YOUR_NODE_NUMBER"  # e.g., "2560"
+  callsign: "YOUR_CALLSIGN"   # e.g., "W5XYZ"
+
+api:
+  host: "0.0.0.0"
+  port: 8073
+  api_key: "GENERATE_WITH_openssl_rand_-base64_32"  # Generate with: openssl rand -base64 32
+
+webhooks:
+  enabled: false  # Experimental - webhook batching not yet implemented
+  n8n_url: "https://your-n8n-instance.com/webhook/asl-events"
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  audit_file: "/opt/asl-agent/audit.log"
+
+security:
+  rate_limit_per_minute: 10
+  require_confirmation: ["disconnectall"]  # Commands requiring confirmation
