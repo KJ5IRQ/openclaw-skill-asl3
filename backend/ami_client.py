@@ -70,32 +70,50 @@ class AMIClient:
 
     async def connect_node(self, node_number: str, monitor_only: bool = False) -> Dict:
         """Connect to another node."""
-        prefix = "*2" if monitor_only else "*3"
-        command = f"rpt fun {config.node_number} {prefix}{node_number}"
+        ilink_mode = 2 if monitor_only else 3
+        command = f"rpt cmd {config.node_number} ilink {ilink_mode} {node_number}"
         response = await self.send_command(command)
-        return {"success": True, "command": command, "response": response}
+
+        # Wait for connection to establish
+        await asyncio.sleep(8)
+
+        # Verify connection
+        nodes = await self.get_connected_nodes()
+        connected = any(n['node'] == node_number for n in nodes)
+
+        if not connected:
+            return {
+                "success": False,
+                "error": f"Node {node_number} did not connect (may be offline or unreachable)",
+                "command": command
+            }
+
+        return {"success": True, "command": command, "node": node_number}
 
     async def disconnect_node(self, node_number: str) -> Dict:
         """Disconnect from a specific node."""
-        command = f"rpt fun {config.node_number} *1{node_number}"
+        command = f"rpt cmd {config.node_number} ilink 1 {node_number}"
         response = await self.send_command(command)
-        return {"success": True, "command": command, "response": response}
+
+        # Wait for disconnection to complete
+        await asyncio.sleep(5)
+
+        # Verify disconnection
+        nodes = await self.get_connected_nodes()
+        still_connected = any(n['node'] == node_number for n in nodes)
+
+        if still_connected:
+            return {
+                "success": False,
+                "error": f"Node {node_number} is still connected",
+                "command": command
+            }
+
+        return {"success": True, "command": command, "node": node_number}
 
     async def disconnect_all(self) -> Dict:
         """Disconnect from all nodes."""
-        command = f"rpt fun {config.node_number} *73"
-        response = await self.send_command(command)
-        return {"success": True, "command": command, "response": response}
-
-    async def execute_macro(self, macro_number: str) -> Dict:
-        """Execute a macro from rpt.conf."""
-        command = f"rpt fun {config.node_number} *D{macro_number}"
-        response = await self.send_command(command)
-        return {"success": True, "command": command, "response": response}
-
-    async def send_dtmf(self, sequence: str) -> Dict:
-        """Send raw DTMF sequence."""
-        command = f"rpt fun {config.node_number} {sequence}"
+        command = f"rpt cmd {config.node_number} ilink 6"
         response = await self.send_command(command)
         return {"success": True, "command": command, "response": response}
 
@@ -136,7 +154,7 @@ class AMIClient:
             # Skip header lines and empty lines
             if not line or line.startswith('*') or '<NONE>' in line:
                 continue
-            
+
             # Check if this line contains comma-separated nodes
             # Format: T427060, T516596, T54199, T55553, T60802
             if ',' in line:
@@ -151,7 +169,7 @@ class AMIClient:
                         if entry and entry[0] in ['T', 'M', 'R']:
                             mode = entry[0]
                             node_num = entry[1:]
-                        
+
                         if node_num:  # Only add if we have a node number
                             nodes.append({
                                 "node": node_num,
