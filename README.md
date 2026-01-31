@@ -8,7 +8,7 @@ Control your AllStar Link node naturally through Telegram or PowerShell, powered
 
 > **📚 New to Linux, GitHub, or Python?** Check out the [Complete Beginner's Guide](docs/BEGINNER_GUIDE.md) for step-by-step instructions with explanations of every command.
 
-> **⚠️ Note on Telegram Integration:** While this skill is designed to work with Telegram via Moltbot, Telegram functionality has not been tested in this project. PowerShell functions are fully tested and verified working. Use Telegram integration at your own discretion.
+
 
 ## Features
 
