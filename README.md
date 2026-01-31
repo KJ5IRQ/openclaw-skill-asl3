@@ -4,7 +4,7 @@
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![ASL3](https://img.shields.io/badge/ASL-3.6.3-green.svg)](https://www.allstarlink.org/)
 
-Control your AllStar Link node naturally through Telegram or PowerShell, powered by [Moltbot/Clawdbot](https://github.com/cktang88/openclaw).
+Control your AllStar Link node naturally through Telegram or PowerShell, powered by [Moltbot/Clawdbot](https://github.com/openclaw/openclaw).
 
 > **📚 New to Linux, GitHub, or Python?** Check out the [Complete Beginner's Guide](docs/BEGINNER_GUIDE.md) for step-by-step instructions with explanations of every command.
 
@@ -171,7 +171,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 Created by KJ5IRQ
 
-Built for the [Moltbot/Clawdbot](https://github.com/cktang88/openclaw) ecosystem.
+Built for the [Moltbot/Clawdbot](https://github.com/openclaw/openclaw) ecosystem.
 
 ## Support
 
