@@ -6,6 +6,8 @@
 
 Control your AllStar Link node naturally through Telegram or PowerShell, powered by https://openclaw.ai.
 
+> **📚 New to Linux, GitHub, or Python?** Check out the [Complete Beginner's Guide](docs/BEGINNER_GUIDE.md) for step-by-step instructions with explanations of every command.
+
 ## Features
 
 - 🤖 **Natural Language Control** - "Connect to node 55553" via Telegram
@@ -26,7 +28,10 @@ Control your AllStar Link node naturally through Telegram or PowerShell, powered
 
 ### Installation
 
-See [INSTALLATION.md](docs/INSTALLATION.md) for complete setup instructions.
+**Choose your path:**
+
+- **[Complete Beginner's Guide](docs/BEGINNER_GUIDE.md)** - Start here if you're new to Linux, SSH, or GitHub. Everything is explained step-by-step.
+- **[Installation Guide](docs/INSTALLATION.md)** - For experienced users. Assumes familiarity with Linux, Git, and Python.
 
 **Quick overview:**
 
@@ -87,8 +92,8 @@ Disconnect-Node -NodeNumber 55553
 │                    │                            │
 │  ┌─────────────────▼────────────────────────┐  │
 │  │  ASL AGENT API (FastAPI)                │  │
-│  │  - REST API on port 8073                 │
-│  │  - Translates REST → AMI commands        │
+│  │  - REST API on port 8073                 │  │
+│  │  - Translates REST → AMI commands        │  │
 │  └─────────────────┬────────────────────────┘  │
 └────────────────────┼─────────────────────────────┘
                      │
