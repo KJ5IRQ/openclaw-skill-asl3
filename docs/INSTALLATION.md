@@ -194,15 +194,14 @@ Follow the [Moltbot installation guide](https://github.com/cktang88/openclaw).
 # Navigate to Moltbot skills directory
 cd "$env:APPDATA\Roaming\npm\node_modules\clawdbot\skills"
 
-# Clone or copy the skill
-git clone https://github.com/KJ5IRQ/openclaw-skill-asl3.git asl-control
-
-# Or manually copy the skill folder
+# Copy just the skill folder from your local clone
+# (Assuming you cloned the repo somewhere first)
+Copy-Item -Recurse "path/to/openclaw-skill-asl3/skill" "asl-control" -Force
 ```
 
 ### 3. Configure PowerShell Script
 
-Edit `asl-control\skill\scripts\asl-api.ps1`:
+Edit `asl-control\scripts\asl-api.ps1`:
 
 ```powershell
 $ASL_API_BASE = "http://YOUR_PI_IP:8073"
@@ -212,7 +211,7 @@ $ASL_API_KEY = "YOUR_API_KEY_FROM_CONFIG_YAML"
 ### 4. Test PowerShell Functions
 
 ```powershell
-. "$env:APPDATA\Roaming\npm\node_modules\clawdbot\skills\asl-control\skill\scripts\asl-api.ps1"
+. "$env:APPDATA\Roaming\npm\node_modules\clawdbot\skills\asl-control\scripts\asl-api.ps1"
 
 Get-NodeStatus
 Get-ConnectedNodes
