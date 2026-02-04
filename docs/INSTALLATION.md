@@ -40,9 +40,9 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Install Python packages
-pip install fastapi==0.109.0 uvicorn[standard]==0.27.0 \
-    pyyaml==6.0.1 python-multipart==0.0.6 \
-    panoramisk==1.4 aiohttp==3.9.1
+pip install fastapi==0.128.1 uvicorn[standard]==0.40.0 \
+    pyyaml==6.0.3 python-multipart==0.0.22 \
+    panoramisk==1.4 aiohttp==3.13.3
 ```
 
 ### 3. Copy Backend Files
