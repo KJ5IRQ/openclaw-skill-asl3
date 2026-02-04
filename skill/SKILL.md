@@ -8,9 +8,31 @@ metadata: {"moltbot":{"requires":{"bins":["pwsh"],"env":[]},"emoji":"📡"}}
 
 Control and monitor your AllStar Link node through the ASL Agent REST API.
 
-## How to Use This Skill
+## Preferred interface (deterministic tool client)
 
-This skill provides PowerShell functions to interact with your AllStar Link node. To use any function, you must first source the helper script:
+Use the Python client (preferred over ad-hoc shell glue):
+
+```bash
+# Always load secrets first
+source ~/.config/secrets/api-keys.env
+
+# Run the deterministic client
+python3 {baseDir}/scripts/asl-tool.py status
+python3 {baseDir}/scripts/asl-tool.py nodes
+python3 {baseDir}/scripts/asl-tool.py connect 55553
+python3 {baseDir}/scripts/asl-tool.py connect 55553 --monitor-only
+python3 {baseDir}/scripts/asl-tool.py disconnect 55553
+python3 {baseDir}/scripts/asl-tool.py disconnect-all
+python3 {baseDir}/scripts/asl-tool.py audit --lines 20
+```
+
+## Legacy interfaces (still supported)
+
+This skill also provides PowerShell functions and a Bash helper script.
+
+### PowerShell
+
+To use any function, first source the helper script:
 
 ```powershell
 . "<PATH_TO_SKILL>/scripts/asl-api.ps1"
