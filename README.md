@@ -4,7 +4,7 @@
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![ASL3](https://img.shields.io/badge/ASL-3.6.3-green.svg)](https://www.allstarlink.org/)
 
-Control your AllStar Link node naturally through Telegram or PowerShell, powered by [Moltbot/Clawdbot](https://github.com/openclaw/openclaw).
+Control your AllStar Link node naturally through Discord, Telegram, or PowerShell, powered by [OpenClaw](https://github.com/openclaw/openclaw).
 
 > **📚 New to Linux, GitHub, or Python?** Check out the [Complete Beginner's Guide](docs/BEGINNER_GUIDE.md) for step-by-step instructions with explanations of every command.
 
@@ -12,8 +12,8 @@ Control your AllStar Link node naturally through Telegram or PowerShell, powered
 
 ## Features
 
-- 🤖 **Natural Language Control** - "Connect to node 55553" via Telegram
-- 💻 **PowerShell API** - Direct commands from Windows terminal
+- 🤖 **Natural Language Control** - "Connect to node 55553" via Discord, Telegram, or any OpenClaw channel
+- 💻 **CLI API** - Bash (Linux/WSL) or PowerShell (Windows) commands from terminal
 - 🔐 **Secure** - API key authentication, localhost-only AMI access
 - 📊 **Monitoring** - Real-time node status and connection tracking
 - 📝 **Audit Trail** - Complete command history logging
@@ -26,7 +26,8 @@ Control your AllStar Link node naturally through Telegram or PowerShell, powered
 - AllStar Link 3 node (tested on ASL 3.6.3)
 - Raspberry Pi (tested on Pi 4B, aarch64)
 - Python 3.13+
-- Moltbot/Clawdbot (for Telegram control)
+- OpenClaw (for Discord/Telegram/channel control)
+- Tailscale (recommended for remote access to Pi API)
 
 ### Installation
 
@@ -43,22 +44,42 @@ Control your AllStar Link node naturally through Telegram or PowerShell, powered
 
 ## Usage Examples
 
-### Via Telegram
+### Via Discord / Telegram (OpenClaw)
 
 ```
 You: Check my node status
-Bot: 🔘 Node 2560 (W5XYZ) Status
-     ⏱️ Uptime: 127 hours
-     🔢 Keyups Today: 142
-     🔗 Connected Nodes: 3
+Link: Node 637050 (KJ5IRQ) Status - Uptime: 30h, Keyups: 161, Connected: 140
 
 You: Connect to node 55553
-Bot: ✅ Connected to node 55553 in transceive (TX/RX) mode
+Link: ✅ Connected to node 55553 in transceive (TX/RX) mode
 
 You: Who's connected?
-Bot: 📡 Connected Nodes (2)
-     • Node 54199
-     • Node 55553
+Link: 📡 Connected Nodes (3): 54199, 55553, 63916
+
+You: Disconnect from node 55553
+Link: ✅ Disconnected from node 55553
+```
+
+### Via Bash (Linux / WSL)
+
+```bash
+# Source the script or run directly
+source skill/scripts/asl-api.sh
+
+asl_status              # Node status and stats
+asl_nodes               # List all connected nodes
+asl_connect 55553       # Connect (transceive)
+asl_connect 55553 true  # Connect (monitor only)
+asl_disconnect 55553    # Disconnect from a node
+asl_disconnect_all      # Drop all connections
+asl_audit 20            # Last 20 audit log entries
+```
+
+Or run as a standalone CLI:
+```bash
+./asl-api.sh status
+./asl-api.sh connect 55553
+./asl-api.sh disconnect 55553
 ```
 
 ### Via PowerShell
@@ -99,17 +120,18 @@ Disconnect-Node -NodeNumber 55553
 │  └─────────────────┬────────────────────────┘  │
 └────────────────────┼─────────────────────────────┘
                      │
-                     │ HTTP API Calls
+                     │ HTTP API Calls (Tailscale recommended)
                      │
-        ┌────────────┴──────────────┐
-        │                           │
-┌───────▼────────┐        ┌─────────▼────────┐
-│   TELEGRAM     │        │   POWERSHELL     │
-│   (Mobile)     │        │   (Windows)      │
-│                │        │                  │
-│  Natural       │        │  Direct API      │
-│  Language      │        │  Functions       │
-└────────────────┘        └──────────────────┘
+        ┌────────────┼──────────────┐
+        │            │              │
+┌───────▼─────┐ ┌────▼────┐ ┌─────▼────────┐
+│  OPENCLAW   │ │  BASH   │ │  POWERSHELL  │
+│  (Discord/  │ │  CLI    │ │  (Windows)   │
+│  Telegram)  │ │  (WSL)  │ │              │
+│             │ │         │ │              │
+│  Natural    │ │  Direct │ │  Direct API  │
+│  Language   │ │  Shell  │ │  Functions   │
+└─────────────┘ └─────────┘ └──────────────┘
 ```
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
@@ -171,7 +193,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 Created by KJ5IRQ
 
-Built for the [Moltbot/Clawdbot](https://github.com/openclaw/openclaw) ecosystem.
+Built for the [OpenClaw](https://github.com/openclaw/openclaw) ecosystem.
 
 ## Support
 

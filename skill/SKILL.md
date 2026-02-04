@@ -63,32 +63,52 @@ Get-AuditLog -Lines 20
 
 ## Configuration
 
+### Bash (Linux / WSL) - Preferred
+Set environment variables (or source your secrets file):
+- `ASL_PI_IP` - Your Pi's Tailscale or LAN IP (e.g., "100.116.156.98")
+- `ASL_API_KEY` - Your API key from config.yaml on the Pi (`/opt/asl-agent/config.yaml`)
+
+Then source the script:
+```bash
+source ~/.config/secrets/api-keys.env  # or wherever your env vars live
+source <PATH_TO_SKILL>/scripts/asl-api.sh
+```
+
+### PowerShell (Windows)
 Edit `asl-api.ps1` to set:
-- `$ASL_API_BASE` - Your Pi's IP and port (e.g., "http://192.168.1.88:8073")
+- `$ASL_API_BASE` - Your Pi's IP and port (e.g., "http://100.116.156.98:8073")
 - `$ASL_API_KEY` - Your API key from config.yaml
 
-## Natural Language Usage (Telegram)
+## Natural Language Usage (Discord / Telegram / any OpenClaw channel)
 
-When the user asks in natural language, translate to appropriate commands:
+When the user asks in natural language, translate to the appropriate bash command via exec:
 
 **User:** "Check my node status"
-**Action:** Run `Get-NodeStatus`
+**Action:** `source asl-api.sh && asl_status`
 
 **User:** "What nodes are connected?"
-**Action:** Run `Get-ConnectedNodes`
+**Action:** `source asl-api.sh && asl_nodes`
 
 **User:** "Connect to node 55553"
-**Action:** Run `Connect-Node -NodeNumber 55553`
+**Action:** `source asl-api.sh && asl_connect 55553`
+
+**User:** "Connect to node 55553 monitor only"
+**Action:** `source asl-api.sh && asl_connect 55553 true`
 
 **User:** "Disconnect from node 55553"
-**Action:** Run `Disconnect-Node -NodeNumber 55553`
+**Action:** `source asl-api.sh && asl_disconnect 55553`
 
 **User:** "Disconnect everything"
-**Action:** Run `Disconnect-AllNodes`
+**Action:** `source asl-api.sh && asl_disconnect_all`
+
+**User:** "Show me the audit log"
+**Action:** `source asl-api.sh && asl_audit 20`
 
 ## Important Notes
 
-- Always source the script first before using any functions
+- Always source the secrets env file before the script (for ASL_API_KEY)
+- Tailscale IP is preferred over LAN IP for the Pi (works from anywhere)
 - Connection verification takes approximately 8-10 seconds
 - The API requires authentication via X-API-Key header
-- All commands are logged to the audit trail
+- All commands are logged to the audit trail on the Pi at `/opt/asl-agent/audit.log`
+- Known: some nodes auto-reconnect after disconnect (scheduler or remote node behavior) - this is an AllStar config issue, not an API bug
