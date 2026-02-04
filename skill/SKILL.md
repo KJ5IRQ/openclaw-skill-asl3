@@ -19,11 +19,20 @@ source ~/.config/secrets/api-keys.env
 # Run the deterministic client
 python3 {baseDir}/scripts/asl-tool.py status
 python3 {baseDir}/scripts/asl-tool.py nodes
+python3 {baseDir}/scripts/asl-tool.py report
 python3 {baseDir}/scripts/asl-tool.py connect 55553
 python3 {baseDir}/scripts/asl-tool.py connect 55553 --monitor-only
 python3 {baseDir}/scripts/asl-tool.py disconnect 55553
 python3 {baseDir}/scripts/asl-tool.py disconnect-all
 python3 {baseDir}/scripts/asl-tool.py audit --lines 20
+
+# Favorites (macros)
+python3 {baseDir}/scripts/asl-tool.py favorites list
+python3 {baseDir}/scripts/asl-tool.py favorites set net 55553
+python3 {baseDir}/scripts/asl-tool.py connect-fav net
+
+# Watch for connection changes (prints JSON-line events)
+python3 {baseDir}/scripts/asl-tool.py watch --interval 5 --emit-initial
 ```
 
 ## Legacy interfaces (still supported)
