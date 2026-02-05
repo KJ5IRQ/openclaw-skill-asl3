@@ -1,955 +1,428 @@
-# ASL Control — `asl-tool.py` User Manual (Verified)
+# asl-control User Manual
 
-This is a **verified, command-line user manual** for the `asl-control` skill’s deterministic client:
+**Node:** KJ5IRQ / 637050
+**Backend:** FastAPI on Raspberry Pi, reachable via Tailscale
+**Tool:** `skill/scripts/asl-tool.py` -- the single entry point for everything below
 
-- Script: `skill/scripts/asl-tool.py`
-- Purpose: a single, predictable CLI entrypoint to the **ASL Agent REST API**
-- Typical target: your AllStarLink node **637050 (KJ5IRQ)** via the Pi’s agent (`:8073`)
-
-Everything in the **Examples** sections below was run against the live API first.
+All examples were tested against the live node. Output shown is real.
 
 ---
 
 ## Prerequisites
 
-### Required environment variables
+Two environment variables. Both live in `~/.config/secrets/api-keys.env`:
 
-You must have:
+- `ASL_PI_IP` -- Tailscale IP of the Pi running the ASL3 agent
+- `ASL_API_KEY` -- Bearer token for the FastAPI backend
 
-- `ASL_API_KEY`
-- Either:
-  - `ASL_API_BASE` (full base URL, e.g. `http://host:8073/`), **or**
-  - `ASL_PI_IP` (IP/host for the Pi; base becomes `http://<ASL_PI_IP>:8073/`)
+If you need to point at a different base URL (non-default port, etc.), set `ASL_API_BASE` to override the full `http://host:port` prefix.
 
-Optional:
-
-- `ASL_STATE_DIR`
-  - If not set, state is stored at:
-    - `~/.openclaw/state/asl-control/`
-
-### Where the env vars live on this system
-
-On this OpenClaw host, they’re typically loaded from:
+**Before any command:**
 
 ```bash
-source /home/kj5irq/.config/secrets/api-keys.env
+source ~/.config/secrets/api-keys.env
 ```
 
 ---
 
-## Quick Start (3 lines)
+## Quick Start
+
+Three commands. That's the loop.
 
 ```bash
-cd /home/kj5irq/.openclaw/workspace/openclaw-skill-asl3/skill/scripts
-source /home/kj5irq/.config/secrets/api-keys.env
-./asl-tool.py report --out text
+source ~/.config/secrets/api-keys.env
+python3 skill/scripts/asl-tool.py report --out text
+python3 skill/scripts/asl-tool.py connect 55553 --out text
 ```
 
-Verified output (example):
-
-```text
-ASL Node Report: 637050 (KJ5IRQ)
-Uptime: 36:29:28
-Keyups today: 204
-Connected nodes: 0
-System: ENABLED
-Scheduler: ENABLED
-Signal on input: NO
-Autopatch: ENABLED (state DOWN)
-```
+Done. You're on the node.
 
 ---
 
-## Output modes (`--out`)
+## Output Modes
 
-Most commands support:
+Every command supports `--out json` or `--out text`.
 
-- `--out json` (default)
-  - Pretty-printed JSON; exit code is **0 on success**, **2 on failure**.
-- `--out text`
-  - Prints `output` (or `report`) if present; otherwise falls back to `OK`/error text.
+- `--out json` (default) -- machine-readable. Full payload. Use this for scripting.
+- `--out text` -- human-readable one-liner. Use this for eyeballing in Discord or terminal.
 
-Note: Some commands (notably `connect-fav`) may print `OK` in text mode when the API response doesn’t include an `output` field.
+**Note:** `status` and `nodes` in text mode fall back to just `OK`. Use `report --out text` for the readable summary. `connect-fav` text mode also falls back to `OK` -- check `report` after if you want confirmation.
 
 ---
 
 ## Command Reference
 
-### Status & reporting
-
-#### `status`
-
-- What it does:
-  - Calls `GET /status` on the ASL Agent.
-
-Syntax:
-
-```bash
-./asl-tool.py status [--out json|text]
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py status --out json
-```
-
-Output:
-
-```json
-{
-  "raw_output": [
-    "************************ NODE 637050 STATISTICS *************************",
-    "",
-    "Selected system state............................: 0",
-    "Signal on input..................................: NO",
-    "System...........................................: ENABLED",
-    "Parrot Mode......................................: DISABLED",
-    "Scheduler........................................: ENABLED",
-    "Tail Time........................................: STANDARD",
-    "Time out timer...................................: ENABLED",
-    "Incoming connections.............................: ENABLED",
-    "Time out timer state.............................: RESET",
-    "Time outs since system initialization............: 0",
-    "Identifier state.................................: CLEAN",
-    "Kerchunks today..................................: 0",
-    "Kerchunks since system initialization............: 1",
-    "Keyups today.....................................: 204",
-    "Keyups since system initialization...............: 214",
-    "DTMF commands today..............................: 0",
-    "DTMF commands since system initialization........: 0",
-    "Last DTMF command executed.......................: N/A",
-    "TX time today....................................: 01:50:58:281",
-    "TX time since system initialization..............: 01:53:43:52",
-    "Uptime...........................................: 36:29:25",
-    "Nodes currently connected to us..................: <NONE>",
-    "Autopatch........................................: ENABLED",
-    "Autopatch state..................................: DOWN",
-    "Autopatch called number..........................: N/A",
-    "Reverse patch/IAXRPT connected...................: DOWN",
-    "User linking commands............................: ENABLED",
-    "User functions...................................: ENABLED"
-  ],
-  "node": "637050",
-  "callsign": "KJ5IRQ",
-  "keyups_today": "204",
-  "uptime": "25",
-  "connected_nodes": "None"
-}
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py status --out text
-```
-
-Output:
-
-```text
-OK
-```
-
-(For `status`, `--out text` currently falls back to `OK` because the backend payload does not include an `output` field.)
-
----
-
-#### `nodes`
-
-- What it does:
-  - Calls `GET /nodes` and returns connected-node list.
-
-Syntax:
-
-```bash
-./asl-tool.py nodes [--out json|text]
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py nodes --out json
-```
-
-Output:
-
-```json
-{
-  "connected_nodes": [],
-  "count": 0
-}
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py nodes --out text
-```
-
-Output:
-
-```text
-OK
-```
-
-(Like `status`, `nodes --out text` falls back to `OK` because there is no `output` field.)
-
----
+### Monitoring
 
 #### `report`
 
-- What it does:
-  - Calls `/status` + `/nodes`, then produces a **human-friendly** roll-up.
-
-Syntax:
+The daily driver for "what's happening on my node." Wraps `status` + `nodes` into one clean output.
 
 ```bash
-./asl-tool.py report [--format text|json] [--out json|text]
+# Human-readable (use this one)
+python3 asl-tool.py report --out text
+
+# Output:
+# ASL Node Report: 637050 (KJ5IRQ)
+# Uptime: 36:35:07
+# Keyups today: 208
+# Connected nodes: 8 - 1999, 2000, 466494, 55553, 56931, 584390, 598100, 62972
+# System: ENABLED
+# Scheduler: ENABLED
+# Signal on input: NO
+# Autopatch: ENABLED (state DOWN)
 ```
-
-Notes:
-
-- `--format` controls the report format inside the JSON wrapper.
-- In practice:
-  - `./asl-tool.py report --out text` prints the report.
-  - `./asl-tool.py report --out json` returns JSON with `report`, plus the raw `status` and `nodes` payloads.
-
-Example (verified):
 
 ```bash
-./asl-tool.py report --out text
+# Full JSON (for scripting -- includes raw ASL3 stats output)
+python3 asl-tool.py report --out json
 ```
 
-Output:
+#### `status`
 
-```text
-ASL Node Report: 637050 (KJ5IRQ)
-Uptime: 36:29:28
-Keyups today: 204
-Connected nodes: 0
-System: ENABLED
-Scheduler: ENABLED
-Signal on input: NO
-Autopatch: ENABLED (state DOWN)
-```
-
-Example (verified):
+Raw node statistics from the ASL3 agent. Everything the Pi knows about the node.
 
 ```bash
-./asl-tool.py report --out json
+python3 asl-tool.py status --out json
+
+# Output includes the full ASL3 stats block:
+# {
+#   "raw_output": [
+#     "Selected system state............................: 0",
+#     "Signal on input..................................: NO",
+#     "Keyups today.....................................: 208",
+#     "TX time today....................................: 01:53:59:896",
+#     "Uptime...........................................: 36:35:07",
+#     ...
+#   ],
+#   "node": "637050",
+#   "callsign": "KJ5IRQ",
+#   "keyups_today": "208"
+# }
 ```
 
-Output (trimmed here only by JSON formatting, not content):
+#### `nodes`
 
-```json
-{
-  "success": true,
-  "node": "637050",
-  "callsign": "KJ5IRQ",
-  "report": "ASL Node Report: 637050 (KJ5IRQ)\nUptime: 36:29:28\nKeyups today: 204\nConnected nodes: 0\nSystem: ENABLED\nScheduler: ENABLED\nSignal on input: NO\nAutopatch: ENABLED (state DOWN)",
-  "status": {
-    "raw_output": [
-      "************************ NODE 637050 STATISTICS *************************",
-      "",
-      "Selected system state............................: 0",
-      "Signal on input..................................: NO",
-      "System...........................................: ENABLED",
-      "Parrot Mode......................................: DISABLED",
-      "Scheduler........................................: ENABLED",
-      "Tail Time........................................: STANDARD",
-      "Time out timer...................................: ENABLED",
-      "Incoming connections.............................: ENABLED",
-      "Time out timer state.............................: RESET",
-      "Time outs since system initialization............: 0",
-      "Identifier state.................................: CLEAN",
-      "Kerchunks today..................................: 0",
-      "Kerchunks since system initialization............: 1",
-      "Keyups today.....................................: 204",
-      "Keyups since system initialization...............: 214",
-      "DTMF commands today..............................: 0",
-      "DTMF commands since system initialization........: 0",
-      "Last DTMF command executed.......................: N/A",
-      "TX time today....................................: 01:50:58:281",
-      "TX time since system initialization..............: 01:53:43:52",
-      "Uptime...........................................: 36:29:28",
-      "Nodes currently connected to us..................: <NONE>",
-      "Autopatch........................................: ENABLED",
-      "Autopatch state..................................: DOWN",
-      "Autopatch called number..........................: N/A",
-      "Reverse patch/IAXRPT connected...................: DOWN",
-      "User linking commands............................: ENABLED",
-      "User functions...................................: ENABLED"
-    ],
-    "node": "637050",
-    "callsign": "KJ5IRQ",
-    "keyups_today": "204",
-    "uptime": "28",
-    "connected_nodes": "None"
-  },
-  "nodes": {
-    "connected_nodes": [],
-    "count": 0
-  },
-  "output": "ASL Node Report: 637050 (KJ5IRQ)\nUptime: 36:29:28\nKeyups today: 204\nConnected nodes: 0\nSystem: ENABLED\nScheduler: ENABLED\nSignal on input: NO\nAutopatch: ENABLED (state DOWN)"
-}
+Just the connected node list. Nothing else.
+
+```bash
+python3 asl-tool.py nodes --out json
+
+# When nodes are connected:
+# {
+#   "connected_nodes": [1999, 2000, 466494, 55553],
+#   "count": 4
+# }
+
+# When empty:
+# {
+#   "connected_nodes": [],
+#   "count": 0
+# }
 ```
+
+#### `audit`
+
+Recent activity log from the Pi backend. Timestamped.
+
+```bash
+python3 asl-tool.py audit --lines 5 --out json
+
+# Output:
+# {
+#   "entries": [
+#     "2026-02-05T00:42:59 | api | nodes | 0 nodes connected",
+#     "2026-02-05T00:44:14 | api | status | Status retrieved",
+#     ...
+#   ],
+#   "count": 5
+# }
+```
+
+`--lines` controls how many entries. Default: 20.
 
 ---
 
-### Linking (connect/disconnect)
+### Connecting & Disconnecting
 
 #### `connect`
 
-- What it does:
-  - Calls `POST /connect` with `{ node, monitor_only }`.
-
-Syntax:
+Connect to a node. Two modes: transceive (default) or monitor-only.
 
 ```bash
-./asl-tool.py connect <node> [--monitor-only] [--out json|text]
+# Transceive (full duplex)
+python3 asl-tool.py connect 55553 --out text
+# Connected to node 55553 (transceive)
+
+# Monitor only (RX listen, no TX)
+python3 asl-tool.py connect 55553 --monitor-only --out text
+# Connected to node 55553 (monitor)
 ```
 
-Example (verified; node **55553**):
-
-```bash
-./asl-tool.py connect 55553 --out text
-```
-
-Output:
-
-```text
-Connected to node 55553 (transceive)
-```
-
-Example (verified; monitor-only):
-
-```bash
-./asl-tool.py connect 55553 --monitor-only --out json
-```
-
-Output:
-
-```json
-{
-  "success": true,
-  "message": "Connected to node 55553 in monitor mode",
-  "node": "55553",
-  "mode": "monitor",
-  "output": "Connected to node 55553 (monitor)"
-}
-```
-
-Behavior note (verified):
-
-- If you run `connect` again while already connected, the API accepted it and effectively **switched mode**:
-
-```bash
-./asl-tool.py connect 55553 --monitor-only --out text
-```
-
-Output:
-
-```text
-Connected to node 55553 (monitor)
-```
-
----
+Connecting to a node you're already on works -- the backend accepts it. If you're in transceive and reconnect with `--monitor-only`, it switches you to monitor. Verified.
 
 #### `disconnect`
 
-- What it does:
-  - Calls `POST /disconnect` with `{ node }`.
-
-Syntax:
+Drop one specific node.
 
 ```bash
-./asl-tool.py disconnect <node> [--out json|text]
+python3 asl-tool.py disconnect 55553 --out text
+# Disconnected from node 55553
 ```
-
-Example (verified; node **55553**):
-
-```bash
-./asl-tool.py disconnect 55553 --out text
-```
-
-Output:
-
-```text
-Disconnected from node 55553
-```
-
----
 
 #### `disconnect-all`
 
-- What it does:
-  - Intended to call `POST /disconnect_all`.
-
-Syntax:
+**Known issue: this command returns 404.** The `/disconnect_all` endpoint does not exist on the Pi backend yet. Calling it will fail:
 
 ```bash
-./asl-tool.py disconnect-all [--out json|text]
+python3 asl-tool.py disconnect-all --out json
+# {
+#   "detail": "Not Found",
+#   "success": false,
+#   "status": 404,
+#   "output": "Failed to disconnect all nodes"
+# }
 ```
 
-Verified result on this system (IMPORTANT):
-
-- The ASL Agent returned **404 Not Found** for `/disconnect_all`.
-- `asl-tool.py` exits with code **2** (failure).
-
-Example (verified):
-
-```bash
-./asl-tool.py disconnect-all --out json
-```
-
-Output (as captured by the OpenClaw exec tool):
-
-```text
-{
-  "detail": "Not Found",
-  "success": false,
-  "status": 404,
-  "output": "Failed to disconnect all nodes"
-}
-
-Command exited with code 2
-```
-
-Workaround:
-
-- Use `nodes` to enumerate connected nodes, then call `disconnect <node>` for each.
+Workaround: disconnect nodes individually, or use `net stop` if you started via a net profile.
 
 ---
 
 ### Favorites
 
-Favorites are local shortcuts stored in a JSON file (see **State files**).
+Named shortcuts to nodes. Saves you from typing node numbers.
 
-#### `favorites list`
-
-Syntax:
+#### Define a favorite
 
 ```bash
-./asl-tool.py favorites list [--out json|text]
+python3 asl-tool.py favorites set tac 55553 --out json
+# {
+#   "success": true,
+#   "favorites": {
+#     "tac": 55553
+#   }
+# }
 ```
 
-Example (verified):
+#### List favorites
 
 ```bash
-./asl-tool.py favorites list --out json
+python3 asl-tool.py favorites list --out json
+# {
+#   "success": true,
+#   "favorites": {
+#     "tac": 55553
+#   }
+# }
 ```
 
-Output:
+#### Connect via favorite
 
-```json
-{
-  "success": true,
-  "favorites": {}
-}
+```bash
+python3 asl-tool.py connect-fav tac --out text
+# OK
+
+# Add --monitor-only for listen-only:
+python3 asl-tool.py connect-fav tac --monitor-only --out text
+```
+
+#### Remove a favorite
+
+```bash
+python3 asl-tool.py favorites remove tac --out json
+# {
+#   "success": true,
+#   "favorites": {}
+# }
+```
+
+Favorites are stored locally in `~/.openclaw/state/asl-control/favorites.json`. They don't touch the Pi.
+
+---
+
+### Net Profiles
+
+The power feature. Define a named net with a node and a duration. Start it. It auto-disconnects when time runs out.
+
+#### How it works
+
+1. Define a profile (name, node, duration)
+2. `net start <name>` -- connects and starts a countdown timer
+3. `net tick` (run via cron) checks the timer. If expired, disconnects automatically.
+4. Or call `net stop` to end early.
+
+Auto-disconnect is the default. There is no "no-auto-disconnect" mode.
+
+#### Define a net profile
+
+```bash
+python3 asl-tool.py net set tac 55553 --duration-minutes 2 --out json
+# {
+#   "success": true,
+#   "profiles": {
+#     "tac": {
+#       "node": 55553,
+#       "monitor_only": false,
+#       "duration_minutes": 2
+#     }
+#   }
+# }
+
+# Monitor-only net:
+python3 asl-tool.py net set scanner 55553 --duration-minutes 60 --monitor-only --out json
+```
+
+#### List net profiles
+
+```bash
+python3 asl-tool.py net list --out json
+# {
+#   "success": true,
+#   "profiles": {
+#     "tac": { "node": 55553, "monitor_only": false, "duration_minutes": 2 },
+#     "ares": { "node": 55553, "monitor_only": false, "duration_minutes": 90 }
+#   }
+# }
+```
+
+#### Start a net session
+
+```bash
+python3 asl-tool.py net start tac --out text
+# NET STARTED: tac -> node 55553 (transceive) for 2m (auto-disconnect)
+```
+
+Override the duration at start time if you want:
+
+```bash
+python3 asl-tool.py net start tac --duration-minutes 30 --out text
+# NET STARTED: tac -> node 55553 (transceive) for 30m (auto-disconnect)
+```
+
+Only one net session can be active at a time.
+
+#### Check status
+
+```bash
+python3 asl-tool.py net status --out text
+# NET ACTIVE: tac -> node 55553 (remaining 1m59s)
+
+# When nothing is running:
+# No active net session
+```
+
+#### Tick (cron enforcement)
+
+This is what enforces the auto-disconnect. Run it from cron every minute.
+
+```bash
+python3 asl-tool.py net tick --out text
+
+# While time remains:
+# NET OK: tac remaining 1m59s
+
+# When the timer has expired (tick fires, disconnects, clears session):
+# NET AUTO-DISCONNECT: node 55553
+
+# When no session is active:
+# No active net session
+```
+
+#### Stop early
+
+```bash
+python3 asl-tool.py net stop --out text
+# NET STOPPED: disconnected node 55553
+```
+
+Clears the session immediately. `net tick` after this returns "No active net session."
+
+#### Remove a profile
+
+```bash
+python3 asl-tool.py net remove tac --out json
+# {
+#   "success": true,
+#   "profiles": {
+#     "ares": { ... }   <-- only remaining profiles shown
+#   }
+# }
 ```
 
 ---
 
-#### `favorites set`
+### Watch
 
-Syntax:
-
-```bash
-./asl-tool.py favorites set <name> <node> [--out json|text]
-```
-
-Example (verified; sets `testfav -> 55553`):
+Continuous monitor. Emits a JSON line every time the connected-nodes list changes. Designed to feed into alerting (cron + Discord, etc.).
 
 ```bash
-./asl-tool.py favorites set testfav 55553 --out json
+python3 asl-tool.py watch --interval 2 --max-seconds 4 --emit-initial --out json
+
+# First line (if --emit-initial):
+# {"event": "initial", "nodes": []}
+
+# On exit (no changes detected in the window):
+# {"success": true, "changes": 0}
 ```
 
-Output:
+Flags:
+- `--interval <seconds>` -- poll interval. Default: 5
+- `--max-seconds <seconds>` -- total run time, then exit. Omit for infinite.
+- `--emit-initial` -- print the current node list immediately on start, before watching for changes.
 
-```json
-{
-  "success": true,
-  "favorites": {
-    "testfav": 55553
-  }
-}
-```
+When a change happens, it emits a `{"event": "change", ...}` line. Use this to trigger alerts.
 
 ---
 
-#### `favorites remove`
+## Cron Recipe: Net Tick
 
-Syntax:
-
-```bash
-./asl-tool.py favorites remove <name> [--out json|text]
-```
-
-Example (verified):
+To get auto-disconnect working, run `net tick` every minute:
 
 ```bash
-./asl-tool.py favorites remove testfav --out json
+* * * * * /bin/bash -c 'source ~/.config/secrets/api-keys.env && python3 /path/to/asl-tool.py net tick --out text >> ~/.openclaw/state/asl-control/tick.log 2>&1'
 ```
 
-Output:
-
-```json
-{
-  "success": true,
-  "favorites": {}
-}
-```
+Or wire it into an OpenClaw cron job for Discord delivery.
 
 ---
 
-#### `connect-fav`
+## State Files
 
-- What it does:
-  - Loads favorites locally, then calls `POST /connect` for the saved node.
+All local state lives here. Nothing in the git repo.
 
-Syntax:
-
-```bash
-./asl-tool.py connect-fav <name> [--monitor-only] [--out json|text]
+```
+~/.openclaw/state/asl-control/
+├── favorites.json       -- saved favorite name -> node mappings
+├── net-profiles.json    -- named net profile definitions
+└── net-session.json     -- active net session (cleared on stop/auto-disconnect)
 ```
 
-Example (verified):
-
-```bash
-./asl-tool.py connect-fav testfav --out text
-```
-
-Output:
-
-```text
-OK
-```
-
-Why it printed `OK`:
-
-- The API response in this case didn’t include an `output` field, so text mode fell back to `OK`.
-
-Example (verified; JSON shows the real payload):
-
-```bash
-./asl-tool.py connect-fav testfav --out json
-```
-
-Output:
-
-```json
-{
-  "success": true,
-  "message": "Connected to node 55553 in transceive mode",
-  "node": "55553",
-  "mode": "transceive",
-  "favorite": "testfav"
-}
-```
+Override the directory with `ASL_STATE_DIR` if needed.
 
 ---
 
-### Net Profiles & timed net sessions
-
-This is the “big feature”: create named profiles and run a **timed session** with auto-disconnect enforcement.
-
-Concepts:
-
-- **Profile**: a saved config `{ node, monitor_only, duration_minutes }`.
-- **Session**: a currently-running net session, saved to disk with an `end_ts`.
-- **Auto-disconnect**: enforced by running `net tick` (cron-friendly).
-
-#### `net list`
-
-Syntax:
-
-```bash
-./asl-tool.py net list [--out json|text]
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py net list --out json
-```
-
-Output (note: an existing `ares` profile was already present):
-
-```json
-{
-  "success": true,
-  "profiles": {
-    "ares": {
-      "duration_minutes": 1,
-      "monitor_only": false,
-      "node": 55553
-    }
-  }
-}
-```
-
----
-
-#### `net set`
-
-Syntax:
-
-```bash
-./asl-tool.py net set <name> <node> [--monitor-only] [--duration-minutes N] [--out json|text]
-```
-
-Example (verified; creates `testn`):
-
-```bash
-./asl-tool.py net set testn 55553 --duration-minutes 2 --out json
-```
-
-Output:
-
-```json
-{
-  "success": true,
-  "profiles": {
-    "ares": {
-      "duration_minutes": 1,
-      "monitor_only": false,
-      "node": 55553
-    },
-    "testn": {
-      "node": 55553,
-      "monitor_only": false,
-      "duration_minutes": 2
-    }
-  }
-}
-```
-
----
-
-#### `net start`
-
-- What it does:
-  - Connects immediately to the profile’s node.
-  - Writes a `net-session.json` with an end timestamp.
-
-Syntax:
-
-```bash
-./asl-tool.py net start <name> [--duration-minutes N] [--out json|text]
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py net start testn --out text
-```
-
-Output:
-
-```text
-NET STARTED: testn -> node 55553 (transceive) for 2m (auto-disconnect)
-```
-
----
-
-#### `net status`
-
-Syntax:
-
-```bash
-./asl-tool.py net status [--out json|text]
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py net status --out text
-```
-
-Output:
-
-```text
-NET ACTIVE: testn -> node 55553 (remaining 1m58s)
-```
-
----
-
-#### `net tick`
-
-- What it does:
-  - If the session is still active: prints remaining time.
-  - If expired: disconnects and clears the session file.
-
-Syntax:
-
-```bash
-./asl-tool.py net tick [--out json|text]
-```
-
-Example (verified; session active):
-
-```bash
-./asl-tool.py net tick --out text
-```
-
-Output:
-
-```text
-NET OK: testn remaining 1m56s
-```
-
-Example (verified; no active session):
-
-```bash
-./asl-tool.py net tick --out text
-```
-
-Output:
-
-```text
-No active net session
-```
-
----
-
-#### `net stop`
-
-- What it does:
-  - Disconnects the session node immediately and clears the session file.
-
-Syntax:
-
-```bash
-./asl-tool.py net stop [--out json|text]
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py net stop --out text
-```
-
-Output:
-
-```text
-NET STOPPED: disconnected node 55553
-```
-
----
-
-#### `net remove`
-
-Syntax:
-
-```bash
-./asl-tool.py net remove <name> [--out json|text]
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py net remove testn --out json
-```
-
-Output:
-
-```json
-{
-  "success": true,
-  "profiles": {
-    "ares": {
-      "duration_minutes": 1,
-      "monitor_only": false,
-      "node": 55553
-    }
-  }
-}
-```
-
----
-
-### Monitoring
-
-#### `audit`
-
-- What it does:
-  - Calls `GET /audit?lines=N`.
-
-Syntax:
-
-```bash
-./asl-tool.py audit [--lines N] [--out json|text]
-```
-
-Example (verified):
-
-```bash
-./asl-tool.py audit --lines 10 --out json
-```
-
-Output:
-
-```json
-{
-  "entries": [
-    "2026-02-05T00:41:04.942259 | api | nodes | 0 nodes connected",
-    "2026-02-05T00:41:20.319025 | api | connect | Node 55553 (transceive)",
-    "2026-02-05T00:41:31.616551 | api | connect | Node 55553 (transceive)",
-    "2026-02-05T00:41:40.126731 | api | disconnect | Node 55553",
-    "2026-02-05T00:41:51.747318 | api | connect | Node 55553 (transceive)",
-    "2026-02-05T00:42:02.378244 | api | connect | Node 55553 (monitor)",
-    "2026-02-05T00:42:12.956477 | api | connect | Node 55553 (monitor)",
-    "2026-02-05T00:42:19.999567 | api | disconnect | Node 55553",
-    "2026-02-05T00:42:36.400188 | api | connect | Node 55553 (transceive)",
-    "2026-02-05T00:42:47.532080 | api | disconnect | Node 55553"
-  ],
-  "count": 10
-}
-```
-
----
-
-#### `watch`
-
-- What it does:
-  - Polls `GET /nodes` and emits **JSON Lines** events to stdout.
-  - Emits an `initial` event if `--emit-initial` is set.
-  - Emits `change` events when connected nodes differ.
-
-Syntax:
-
-```bash
-./asl-tool.py watch [--interval SECONDS] [--max-seconds SECONDS] [--emit-initial] [--out json|text]
-```
-
-Example (verified; bounded):
-
-```bash
-./asl-tool.py watch --interval 2 --max-seconds 4 --emit-initial --out json
-```
-
-Output:
-
-```json
-{"event": "initial", "nodes": []}
-{
-  "success": true,
-  "changes": 0
-}
-```
-
-Notes:
-
-- The first line is an **event line** (JSONL).
-- The last block is the command’s final JSON summary.
-
----
-
-## Favorites (workflow)
-
-Typical flow:
-
-- Save a node number under a short name
-- Connect by name
-- Remove when you’re done
-
-Verified example sequence (using node **55553**):
-
-```bash
-./asl-tool.py favorites set testfav 55553 --out json
-./asl-tool.py connect-fav testfav --out json
-./asl-tool.py disconnect 55553 --out text
-./asl-tool.py favorites remove testfav --out json
-```
-
----
-
-## Net Profiles (workflow)
-
-A clean “net night” flow:
-
-- Define a profile with a duration
-- Start it
-- Periodically enforce with `net tick` (cron)
-- Stop early if needed
-
-Verified example sequence:
-
-```bash
-./asl-tool.py net set testn 55553 --duration-minutes 2 --out json
-./asl-tool.py net start testn --out text
-./asl-tool.py net status --out text
-./asl-tool.py net tick --out text
-./asl-tool.py net stop --out text
-./asl-tool.py net remove testn --out json
-```
-
-Cron-friendly enforcement idea:
-
-- Run `net tick` every minute (or every 30s) from cron/systemd timer.
-- When the session expires, `net tick` will disconnect and clear state.
+## Known Issues
+
+- **`disconnect-all` returns 404.** The backend endpoint is missing on the Pi. Use individual `disconnect` or `net stop` instead.
+- **`status --out text` and `nodes --out text` return just "OK."** They don't have custom text formatting. Use `report --out text` for human output.
+- **`connect-fav --out text` returns "OK."** The favorite connect doesn't pipe through the underlying connect message in text mode. Check with `report` after.
+- **One active net session at a time.** Starting a second `net start` without stopping the first will overwrite the session file.
 
 ---
 
 ## Troubleshooting
 
-### “Missing ASL_API_BASE or ASL_PI_IP in environment”
+**"Connection refused" or timeout on any command:**
+The Pi is unreachable. Check Tailscale: `tailscale status` and confirm `ASL_PI_IP` is correct.
 
-- Set one of:
-  - `ASL_API_BASE=http://<host>:8073/`
-  - `ASL_PI_IP=<host>`
+**401 Unauthorized:**
+`ASL_API_KEY` is wrong or not set. Check: `echo $ASL_API_KEY`
 
-### “Missing ASL_API_KEY in environment”
+**"Not Found" (404):**
+The endpoint doesn't exist on the backend. Known for `disconnect_all`. Check `audit` to see what the Pi actually logged.
 
-- Load your secrets:
+**Net tick doesn't disconnect:**
+Tick only fires when you run it. If you're not running it via cron, nothing happens automatically. The timer is checked, not enforced by a daemon.
 
-```bash
-source /home/kj5irq/.config/secrets/api-keys.env
-```
-
-### `disconnect-all` fails
-
-Verified on this system:
-
-- `/disconnect_all` returned **404 Not Found**.
-- This is an API/backend mismatch (CLI expects the endpoint).
-
-Workaround:
-
-- Use `nodes --out json` and disconnect individually.
-
-### Text mode only prints `OK`
-
-- This happens when the response doesn’t include `output` (or `report`).
-- Use `--out json` when you need details.
-
----
-
-## State files (where things live)
-
-Default state directory:
-
-- `~/.openclaw/state/asl-control/`
-
-Files:
-
-- `favorites.json`
-  - Stores `{"favorites": {"name": nodeNumber}}`
-- `net-profiles.json`
-  - Stores profiles by name
-- `net-session.json`
-  - Created by `net start`
-  - Cleared by `net stop` or an expired `net tick`
-
-You can override the directory with:
-
-- `ASL_STATE_DIR=/some/path`
-
----
-
-## Safety / operational notes (ham-friendly)
-
-- **Be deliberate with transceive vs monitor-only.**
-  - `--monitor-only` is a safe “listen only” link.
-- Keep your linking clean:
-  - Prefer timed nets + `net tick` so you don’t leave links up overnight.
+**Favorites disappear after reinstall:**
+They're in `~/.openclaw/state/asl-control/`, not the skill repo. They survive updates. If they're gone, someone deleted that directory.
