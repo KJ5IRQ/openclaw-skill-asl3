@@ -1,7 +1,7 @@
 ---
 name: asl-control
 description: Monitor and control AllStar Link amateur radio nodes via REST API
-metadata: {"moltbot":{"requires":{"bins":["pwsh"],"env":[]},"emoji":"📡"}}
+metadata: {"openclaw":{"emoji":"📡","requires":{"bins":["python3"],"env":["ASL_PI_IP","ASL_API_KEY"]}}}
 ---
 
 # AllStar Link Node Control
@@ -16,24 +16,38 @@ Use the Python client (preferred over ad-hoc shell glue):
 # Always load secrets first
 source ~/.config/secrets/api-keys.env
 
+# Optional override if you don't want ASL_PI_IP
+# export ASL_API_BASE="http://100.116.156.98:8073"
+
 # Run the deterministic client
 python3 {baseDir}/scripts/asl-tool.py status
 python3 {baseDir}/scripts/asl-tool.py nodes
-python3 {baseDir}/scripts/asl-tool.py report
-python3 {baseDir}/scripts/asl-tool.py connect 55553
-python3 {baseDir}/scripts/asl-tool.py connect 55553 --monitor-only
-python3 {baseDir}/scripts/asl-tool.py disconnect 55553
-python3 {baseDir}/scripts/asl-tool.py disconnect-all
+python3 {baseDir}/scripts/asl-tool.py report --out text
+python3 {baseDir}/scripts/asl-tool.py connect 55553 --out text
+python3 {baseDir}/scripts/asl-tool.py connect 55553 --monitor-only --out text
+python3 {baseDir}/scripts/asl-tool.py disconnect 55553 --out text
+python3 {baseDir}/scripts/asl-tool.py disconnect-all --out text
 python3 {baseDir}/scripts/asl-tool.py audit --lines 20
 
 # Favorites (macros)
 python3 {baseDir}/scripts/asl-tool.py favorites list
 python3 {baseDir}/scripts/asl-tool.py favorites set net 55553
-python3 {baseDir}/scripts/asl-tool.py connect-fav net
+python3 {baseDir}/scripts/asl-tool.py connect-fav net --out text
 
-# Watch for connection changes (prints JSON-line events)
+# Net profiles (auto-disconnect default)
+python3 {baseDir}/scripts/asl-tool.py net list
+python3 {baseDir}/scripts/asl-tool.py net set ares 55553 --duration-minutes 90
+python3 {baseDir}/scripts/asl-tool.py net start ares --out text
+python3 {baseDir}/scripts/asl-tool.py net status
+python3 {baseDir}/scripts/asl-tool.py net tick
+python3 {baseDir}/scripts/asl-tool.py net stop --out text
+
+# Watch for connection changes (JSON-line events)
 python3 {baseDir}/scripts/asl-tool.py watch --interval 5 --emit-initial
 ```
+
+State files (favorites + net sessions) are stored in:
+- `~/.openclaw/state/asl-control/`
 
 ## Legacy interfaces (still supported)
 

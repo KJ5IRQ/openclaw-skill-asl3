@@ -80,14 +80,24 @@ def _req(method: str, path: str, *, json_body: dict | None = None) -> dict:
     return payload
 
 
-def _skill_dir() -> Path:
-    # skill/scripts/asl-tool.py -> skill
-    return Path(__file__).resolve().parents[1]
+def _state_dir() -> Path:
+    # Per-user state. Keeps git clean and survives updates.
+    p = _env("ASL_STATE_DIR")
+    if p:
+        return Path(p).expanduser().resolve()
+    return Path.home() / ".openclaw" / "state" / "asl-control"
 
 
 def _favorites_path() -> Path:
-    # Keep local to the skill directory so it survives per-workspace.
-    return _skill_dir() / "config" / "favorites.json"
+    return _state_dir() / "favorites.json"
+
+
+def _net_profiles_path() -> Path:
+    return _state_dir() / "net-profiles.json"
+
+
+def _net_session_path() -> Path:
+    return _state_dir() / "net-session.json"
 
 
 def _load_favorites() -> dict[str, int]:
@@ -124,7 +134,10 @@ def cmd_nodes(_: argparse.Namespace) -> dict:
 
 def cmd_connect(args: argparse.Namespace) -> dict:
     body = {"node": str(args.node), "monitor_only": bool(args.monitor_only)}
-    return _req("POST", "/connect", json_body=body)
+    out = _req("POST", "/connect", json_body=body)
+    mode = "monitor" if bool(args.monitor_only) else "transceive"
+    out.setdefault("output", f"Connected to node {args.node} ({mode})" if out.get("success", True) else f"Failed to connect to node {args.node}")
+    return out
 
 
 def cmd_connect_fav(args: argparse.Namespace) -> dict:
@@ -142,11 +155,15 @@ def cmd_connect_fav(args: argparse.Namespace) -> dict:
 
 
 def cmd_disconnect(args: argparse.Namespace) -> dict:
-    return _req("POST", "/disconnect", json_body={"node": str(args.node)})
+    out = _req("POST", "/disconnect", json_body={"node": str(args.node)})
+    out.setdefault("output", f"Disconnected from node {args.node}" if out.get("success", True) else f"Failed to disconnect from node {args.node}")
+    return out
 
 
 def cmd_disconnect_all(_: argparse.Namespace) -> dict:
-    return _req("POST", "/disconnect_all")
+    out = _req("POST", "/disconnect_all")
+    out.setdefault("output", "Disconnected all nodes" if out.get("success", True) else "Failed to disconnect all nodes")
+    return out
 
 
 def cmd_audit(args: argparse.Namespace) -> dict:
@@ -255,6 +272,175 @@ def cmd_fav_remove(args: argparse.Namespace) -> dict:
     return {"success": False, "error": f"Favorite not found: {args.name}", "favorites": favs}
 
 
+def _load_net_profiles() -> dict[str, Any]:
+    p = _net_profiles_path()
+    if not p.exists():
+        return {"profiles": {}}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        raise SystemExit(f"Failed to read net profiles: {p}")
+
+
+def _save_net_profiles(obj: dict[str, Any]) -> None:
+    p = _net_profiles_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def cmd_net_list(_: argparse.Namespace) -> dict:
+    return {"success": True, **_load_net_profiles()}
+
+
+def cmd_net_set(args: argparse.Namespace) -> dict:
+    obj = _load_net_profiles()
+    profiles = obj.setdefault("profiles", {})
+    profiles[args.name] = {
+        "node": int(args.node),
+        "monitor_only": bool(args.monitor_only),
+        "duration_minutes": int(args.duration_minutes),
+    }
+    _save_net_profiles(obj)
+    return {"success": True, **obj}
+
+
+def cmd_net_remove(args: argparse.Namespace) -> dict:
+    obj = _load_net_profiles()
+    profiles = obj.setdefault("profiles", {})
+    if args.name in profiles:
+        profiles.pop(args.name)
+        _save_net_profiles(obj)
+        return {"success": True, **obj}
+    return {"success": False, "error": f"Net profile not found: {args.name}", **obj}
+
+
+def _load_net_session() -> dict[str, Any] | None:
+    p = _net_session_path()
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _save_net_session(obj: dict[str, Any] | None) -> None:
+    p = _net_session_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if obj is None:
+        if p.exists():
+            p.unlink()
+        return
+    p.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def cmd_net_start(args: argparse.Namespace) -> dict:
+    profs = _load_net_profiles().get("profiles", {})
+    prof = profs.get(args.name)
+    if not prof:
+        return {"success": False, "error": f"Net profile not found: {args.name}", "profiles": list(profs.keys())}
+
+    node = int(prof["node"])
+    monitor_only = bool(prof.get("monitor_only", False))
+    dur_min = int(prof.get("duration_minutes", 60))
+    if args.duration_minutes is not None:
+        dur_min = int(args.duration_minutes)
+
+    # Connect now
+    connect_out = _req("POST", "/connect", json_body={"node": str(node), "monitor_only": monitor_only})
+
+    now = int(time.time())
+    end_ts = now + dur_min * 60
+    session = {
+        "profile": args.name,
+        "node": node,
+        "monitor_only": monitor_only,
+        "started_ts": now,
+        "end_ts": end_ts,
+    }
+    _save_net_session(session)
+
+    ok = bool(connect_out.get("success", True))
+    mode = "monitor" if monitor_only else "transceive"
+    out_text = (
+        f"NET STARTED: {args.name} -> node {node} ({mode}) for {dur_min}m (auto-disconnect)"
+        if ok
+        else f"NET START FAILED: {args.name} -> node {node}"
+    )
+
+    return {
+        "success": ok,
+        "action": "net_start",
+        "output": out_text,
+        "session": session,
+        "connect": connect_out,
+        "note": "Auto-disconnect is default. Run: asl-tool.py net tick (cron-friendly) to enforce, or net stop to end early.",
+    }
+
+
+def cmd_net_status(_: argparse.Namespace) -> dict:
+    sess = _load_net_session()
+    if not sess:
+        return {"success": True, "active": False, "output": "No active net session"}
+    remaining = int(sess.get("end_ts", 0)) - int(time.time())
+    rem = max(0, remaining)
+    mins = rem // 60
+    secs = rem % 60
+    out = f"NET ACTIVE: {sess.get('profile')} -> node {sess.get('node')} (remaining {mins}m{secs:02d}s)"
+    return {"success": True, "active": True, "session": sess, "remaining_seconds": rem, "output": out}
+
+
+def cmd_net_stop(_: argparse.Namespace) -> dict:
+    sess = _load_net_session()
+    if not sess:
+        return {"success": True, "active": False, "output": "No active net session"}
+    node = int(sess.get("node"))
+    out = _req("POST", "/disconnect", json_body={"node": str(node)})
+    _save_net_session(None)
+    ok = bool(out.get("success", True))
+    return {
+        "success": ok,
+        "action": "net_stop",
+        "output": f"NET STOPPED: disconnected node {node}" if ok else f"NET STOP FAILED: node {node}",
+        "disconnect": out,
+    }
+
+
+def cmd_net_tick(_: argparse.Namespace) -> dict:
+    """Cron-friendly enforcement: if active session expired, disconnect."""
+    sess = _load_net_session()
+    if not sess:
+        return {"success": True, "active": False, "output": "No active net session"}
+
+    now = int(time.time())
+    end_ts = int(sess.get("end_ts", 0))
+    if now < end_ts:
+        rem = end_ts - now
+        mins = rem // 60
+        secs = rem % 60
+        return {
+            "success": True,
+            "active": True,
+            "action": "noop",
+            "session": sess,
+            "remaining_seconds": rem,
+            "output": f"NET OK: {sess.get('profile')} remaining {mins}m{secs:02d}s",
+        }
+
+    node = int(sess.get("node"))
+    out = _req("POST", "/disconnect", json_body={"node": str(node)})
+    _save_net_session(None)
+    ok = bool(out.get("success", True))
+    return {
+        "success": ok,
+        "active": False,
+        "action": "auto_disconnect",
+        "output": f"NET AUTO-DISCONNECT: node {node}" if ok else f"NET AUTO-DISCONNECT FAILED: node {node}",
+        "disconnect": out,
+        "expired_session": sess,
+    }
+
+
 def _nodes_signature(nodes: dict[str, Any]) -> list[str]:
     lst = nodes.get("connected_nodes") or []
     out = []
@@ -318,8 +504,18 @@ def cmd_watch(args: argparse.Namespace) -> dict:
     return {"success": True, "changes": changes}
 
 
-def _print(out: dict) -> int:
-    sys.stdout.write(json.dumps(out, indent=2, sort_keys=False) + "\n")
+def _emit(out: dict, out_mode: str) -> int:
+    if out_mode == "text":
+        text = out.get("output") or out.get("report")
+        if not text:
+            # fallback: compact one-line
+            if out.get("success", True):
+                text = "OK"
+            else:
+                text = out.get("error") or "ERROR"
+        sys.stdout.write(str(text).rstrip() + "\n")
+    else:
+        sys.stdout.write(json.dumps(out, indent=2, sort_keys=False) + "\n")
     return 0 if out.get("success", True) else 2
 
 
@@ -327,53 +523,108 @@ def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="asl-tool.py", add_help=True)
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    def add_out(sp: argparse.ArgumentParser) -> None:
+        sp.add_argument("--out", choices=["json", "text"], default="json", help="Output format")
+
     sp = sub.add_parser("status", help="Get local node status")
+    add_out(sp)
     sp.set_defaults(fn=cmd_status)
 
     sp = sub.add_parser("nodes", help="List connected nodes")
+    add_out(sp)
     sp.set_defaults(fn=cmd_nodes)
 
     sp = sub.add_parser("report", help="Human-friendly report (wraps /status + /nodes)")
+    add_out(sp)
     sp.add_argument("--format", choices=["json", "text"], default="text")
     sp.set_defaults(fn=cmd_report)
 
     sp = sub.add_parser("connect", help="Connect to a node")
+    add_out(sp)
     sp.add_argument("node", type=int, help="Target node number")
     sp.add_argument("--monitor-only", action="store_true", help="RX-only monitor mode")
     sp.set_defaults(fn=cmd_connect)
 
     sp = sub.add_parser("connect-fav", help="Connect using a saved favorite name")
+    add_out(sp)
     sp.add_argument("name", help="Favorite name")
     sp.add_argument("--monitor-only", action="store_true", help="RX-only monitor mode")
     sp.set_defaults(fn=cmd_connect_fav)
 
     sp = sub.add_parser("disconnect", help="Disconnect from a node")
+    add_out(sp)
     sp.add_argument("node", type=int, help="Target node number")
     sp.set_defaults(fn=cmd_disconnect)
 
     sp = sub.add_parser("disconnect-all", help="Drop all connections")
+    add_out(sp)
     sp.set_defaults(fn=cmd_disconnect_all)
 
     sp = sub.add_parser("audit", help="Read audit log")
+    add_out(sp)
     sp.add_argument("--lines", type=int, default=20, help="How many lines")
     sp.set_defaults(fn=cmd_audit)
 
     sp = sub.add_parser("favorites", help="Manage favorite node shortcuts")
+    add_out(sp)
     fav_sub = sp.add_subparsers(dest="fav_cmd", required=True)
 
     sp2 = fav_sub.add_parser("list", help="List favorites")
+    add_out(sp2)
     sp2.set_defaults(fn=cmd_fav_list)
 
     sp2 = fav_sub.add_parser("set", help="Set favorite name -> node")
+    add_out(sp2)
     sp2.add_argument("name")
     sp2.add_argument("node", type=int)
     sp2.set_defaults(fn=cmd_fav_set)
 
     sp2 = fav_sub.add_parser("remove", help="Remove favorite")
+    add_out(sp2)
     sp2.add_argument("name")
     sp2.set_defaults(fn=cmd_fav_remove)
 
+    sp = sub.add_parser("net", help="Manage net profiles and run timed net sessions")
+    add_out(sp)
+    net_sub = sp.add_subparsers(dest="net_cmd", required=True)
+
+    sp2 = net_sub.add_parser("list", help="List net profiles")
+    add_out(sp2)
+    sp2.set_defaults(fn=cmd_net_list)
+
+    sp2 = net_sub.add_parser("set", help="Set net profile")
+    add_out(sp2)
+    sp2.add_argument("name")
+    sp2.add_argument("node", type=int)
+    sp2.add_argument("--monitor-only", action="store_true")
+    sp2.add_argument("--duration-minutes", type=int, default=90)
+    sp2.set_defaults(fn=cmd_net_set)
+
+    sp2 = net_sub.add_parser("remove", help="Remove net profile")
+    add_out(sp2)
+    sp2.add_argument("name")
+    sp2.set_defaults(fn=cmd_net_remove)
+
+    sp2 = net_sub.add_parser("start", help="Start a net session (auto-disconnect default)")
+    add_out(sp2)
+    sp2.add_argument("name")
+    sp2.add_argument("--duration-minutes", type=int, default=None)
+    sp2.set_defaults(fn=cmd_net_start)
+
+    sp2 = net_sub.add_parser("status", help="Show active net session")
+    add_out(sp2)
+    sp2.set_defaults(fn=cmd_net_status)
+
+    sp2 = net_sub.add_parser("stop", help="Stop net session early")
+    add_out(sp2)
+    sp2.set_defaults(fn=cmd_net_stop)
+
+    sp2 = net_sub.add_parser("tick", help="Enforce auto-disconnect (cron-friendly)")
+    add_out(sp2)
+    sp2.set_defaults(fn=cmd_net_tick)
+
     sp = sub.add_parser("watch", help="Watch connected nodes and emit JSON-line events")
+    add_out(sp)
     sp.add_argument("--interval", type=float, default=5.0)
     sp.add_argument("--max-seconds", type=float, default=None)
     sp.add_argument("--emit-initial", action="store_true", help="Emit initial state event")
@@ -381,13 +632,20 @@ def main(argv: list[str]) -> int:
 
     args = p.parse_args(argv)
 
+    out_mode = getattr(args, "out", "json")
+
     # Dispatch favorites subcommand
     if args.cmd == "favorites":
         out = args.fn(args)
-        return _print(out)
+        return _emit(out, out_mode)
+
+    # Dispatch net subcommand
+    if args.cmd == "net":
+        out = args.fn(args)
+        return _emit(out, out_mode)
 
     out = args.fn(args)
-    return _print(out)
+    return _emit(out, out_mode)
 
 
 if __name__ == "__main__":
