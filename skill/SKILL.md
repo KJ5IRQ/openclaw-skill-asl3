@@ -8,152 +8,108 @@ metadata: {"openclaw":{"emoji":"📡","requires":{"bins":["python3"],"env":["ASL
 
 Control and monitor your AllStar Link node through the ASL Agent REST API.
 
-## Preferred interface (deterministic tool client)
+---
 
-Use the Python client (preferred over ad-hoc shell glue):
+## Prerequisites
+
+This skill is a **client**. It talks to an ASL3 agent backend that must be running independently on a Raspberry Pi (or any host reachable over your network).
+
+**You need:**
+
+- A Raspberry Pi running the `asl-agent` FastAPI service (see `backend/` in this repo for the server code)
+- The Pi must be reachable from wherever OpenClaw runs -- Tailscale is the recommended way
+- The Pi's `config.yaml` (at `/opt/asl-agent/config.yaml`) contains your API key and node number
+
+**Environment variables** (set in your secrets file, e.g. `~/.config/secrets/api-keys.env`):
+
+- `ASL_PI_IP` -- IP address of the Pi (Tailscale IP preferred, works from anywhere)
+- `ASL_API_KEY` -- Bearer token from the Pi's `config.yaml`
+- `ASL_API_BASE` -- (optional) override the full base URL if you're not on port 8073. Format: `http://host:port`
+- `ASL_STATE_DIR` -- (optional) override where favorites/net state files are stored. Default: `~/.openclaw/state/asl-control/`
+
+---
+
+## Usage
+
+All commands go through the Python client. Always source your secrets first:
 
 ```bash
-# Always load secrets first
 source ~/.config/secrets/api-keys.env
+python3 {baseDir}/scripts/asl-tool.py <command> [flags]
+```
 
-# Optional override if you don't want ASL_PI_IP
-# export ASL_API_BASE="http://100.116.156.98:8073"
+Every command supports `--out json` (default, machine-readable) or `--out text` (human-readable one-liner).
 
-# Run the deterministic client
-python3 {baseDir}/scripts/asl-tool.py status
-python3 {baseDir}/scripts/asl-tool.py nodes
+### Quick reference
+
+```bash
+# Status & monitoring
+python3 {baseDir}/scripts/asl-tool.py status --out text
+python3 {baseDir}/scripts/asl-tool.py nodes --out text
 python3 {baseDir}/scripts/asl-tool.py report --out text
+python3 {baseDir}/scripts/asl-tool.py audit --lines 20
+
+# Connect / disconnect
 python3 {baseDir}/scripts/asl-tool.py connect 55553 --out text
 python3 {baseDir}/scripts/asl-tool.py connect 55553 --monitor-only --out text
 python3 {baseDir}/scripts/asl-tool.py disconnect 55553 --out text
-python3 {baseDir}/scripts/asl-tool.py disconnect-all --out text
-python3 {baseDir}/scripts/asl-tool.py audit --lines 20
 
-# Favorites (macros)
+# Favorites
 python3 {baseDir}/scripts/asl-tool.py favorites list
-python3 {baseDir}/scripts/asl-tool.py favorites set net 55553
-python3 {baseDir}/scripts/asl-tool.py connect-fav net --out text
+python3 {baseDir}/scripts/asl-tool.py favorites set mynet 55553
+python3 {baseDir}/scripts/asl-tool.py favorites remove mynet
+python3 {baseDir}/scripts/asl-tool.py connect-fav mynet --out text
 
-# Net profiles (auto-disconnect default)
+# Net profiles (timed sessions, auto-disconnect default)
 python3 {baseDir}/scripts/asl-tool.py net list
 python3 {baseDir}/scripts/asl-tool.py net set ares 55553 --duration-minutes 90
 python3 {baseDir}/scripts/asl-tool.py net start ares --out text
-python3 {baseDir}/scripts/asl-tool.py net status
-python3 {baseDir}/scripts/asl-tool.py net tick
+python3 {baseDir}/scripts/asl-tool.py net status --out text
+python3 {baseDir}/scripts/asl-tool.py net tick --out text
 python3 {baseDir}/scripts/asl-tool.py net stop --out text
+python3 {baseDir}/scripts/asl-tool.py net remove ares
 
-# Watch for connection changes (JSON-line events)
+# Watch (JSON-line event stream)
 python3 {baseDir}/scripts/asl-tool.py watch --interval 5 --emit-initial
 ```
 
-State files (favorites + net sessions) are stored in:
-- `~/.openclaw/state/asl-control/`
+### State files
 
-## Legacy interfaces (still supported)
+Favorites and net session state live outside the repo, so they survive updates:
 
-This skill also provides PowerShell functions and a Bash helper script.
+- `~/.openclaw/state/asl-control/favorites.json`
+- `~/.openclaw/state/asl-control/net-profiles.json`
+- `~/.openclaw/state/asl-control/net-session.json`
 
-### PowerShell
+### Net tick (cron)
 
-To use any function, first source the helper script:
+Auto-disconnect only fires when `net tick` runs. Wire it to cron for enforcement:
 
-```powershell
-. "<PATH_TO_SKILL>/scripts/asl-api.ps1"
-```
-
-## Available Functions
-
-### Node Status and Monitoring
-- **Get-NodeStatus** - Shows node uptime, keyup count, and connected nodes
-- **Get-ConnectedNodes** - Lists all currently connected nodes
-- **Get-AuditLog -Lines <n>** - View recent command history
-
-### Node Connection Management
-- **Connect-Node -NodeNumber <node>** - Connect to a node in transceive mode
-- **Connect-Node -NodeNumber <node> -MonitorOnly** - Connect in monitor (RX only) mode
-- **Disconnect-Node -NodeNumber <node>** - Disconnect from a specific node
-- **Disconnect-AllNodes** - Disconnect from all nodes
-
-## Examples
-
-### Check node status
-```powershell
-. "<PATH_TO_SKILL>/scripts/asl-api.ps1"
-Get-NodeStatus
-```
-
-### List connected nodes
-```powershell
-. "<PATH_TO_SKILL>/scripts/asl-api.ps1"
-Get-ConnectedNodes
-```
-
-### Connect to a node
-```powershell
-. "<PATH_TO_SKILL>/scripts/asl-api.ps1"
-Connect-Node -NodeNumber 55553
-```
-
-### Disconnect from a node
-```powershell
-. "<PATH_TO_SKILL>/scripts/asl-api.ps1"
-Disconnect-Node -NodeNumber 55553
-```
-
-### View recent commands
-```powershell
-. "<PATH_TO_SKILL>/scripts/asl-api.ps1"
-Get-AuditLog -Lines 20
-```
-
-## Configuration
-
-### Bash (Linux / WSL) - Preferred
-Set environment variables (or source your secrets file):
-- `ASL_PI_IP` - Your Pi's Tailscale or LAN IP (e.g., "100.116.156.98")
-- `ASL_API_KEY` - Your API key from config.yaml on the Pi (`/opt/asl-agent/config.yaml`)
-
-Then source the script:
 ```bash
-source ~/.config/secrets/api-keys.env  # or wherever your env vars live
-source <PATH_TO_SKILL>/scripts/asl-api.sh
+* * * * * /bin/bash -c 'source ~/.config/secrets/api-keys.env && python3 /path/to/asl-tool.py net tick --out text >> ~/.openclaw/state/asl-control/tick.log 2>&1'
 ```
 
-### PowerShell (Windows)
-Edit `asl-api.ps1` to set:
-- `$ASL_API_BASE` - Your Pi's IP and port (e.g., "http://100.116.156.98:8073")
-- `$ASL_API_KEY` - Your API key from config.yaml
+---
 
-## Natural Language Usage (Discord / Telegram / any OpenClaw channel)
+## Natural language dispatch
 
-When the user asks in natural language, translate to the appropriate bash command via exec:
+When the user asks in natural language, translate to the Python client:
 
-**User:** "Check my node status"
-**Action:** `source asl-api.sh && asl_status`
+- "Check my node" -> `asl-tool.py report --out text`
+- "What's connected?" -> `asl-tool.py nodes --out text`
+- "Connect to node 55553" -> `asl-tool.py connect 55553 --out text`
+- "Connect to node 55553 monitor only" -> `asl-tool.py connect 55553 --monitor-only --out text`
+- "Connect to <favorite name>" -> `asl-tool.py connect-fav "<name>" --out text`
+- "Disconnect from node 55553" -> `asl-tool.py disconnect 55553 --out text`
+- "List my favorites" -> `asl-tool.py favorites list --out text`
+- "Start net <name>" -> `asl-tool.py net start <name> --out text`
+- "Net status" -> `asl-tool.py net status --out text`
+- "Show audit log" -> `asl-tool.py audit --lines 20 --out text`
 
-**User:** "What nodes are connected?"
-**Action:** `source asl-api.sh && asl_nodes`
+---
 
-**User:** "Connect to node 55553"
-**Action:** `source asl-api.sh && asl_connect 55553`
+## Notes
 
-**User:** "Connect to node 55553 monitor only"
-**Action:** `source asl-api.sh && asl_connect 55553 true`
-
-**User:** "Disconnect from node 55553"
-**Action:** `source asl-api.sh && asl_disconnect 55553`
-
-**User:** "Disconnect everything"
-**Action:** `source asl-api.sh && asl_disconnect_all`
-
-**User:** "Show me the audit log"
-**Action:** `source asl-api.sh && asl_audit 20`
-
-## Important Notes
-
-- Always source the secrets env file before the script (for ASL_API_KEY)
-- Tailscale IP is preferred over LAN IP for the Pi (works from anywhere)
-- Connection verification takes approximately 8-10 seconds
-- The API requires authentication via X-API-Key header
+- Tailscale IP is preferred over LAN IP for `ASL_PI_IP` (works from anywhere on the mesh)
+- Some nodes auto-reconnect after disconnect due to the AllStar scheduler on your node. That's an ASL config behavior, not an API bug. Disable the scheduler first if you need connections to stay dropped.
 - All commands are logged to the audit trail on the Pi at `/opt/asl-agent/audit.log`
-- Known: some nodes auto-reconnect after disconnect (scheduler or remote node behavior) - this is an AllStar config issue, not an API bug

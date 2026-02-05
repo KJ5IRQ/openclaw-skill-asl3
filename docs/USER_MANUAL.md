@@ -46,7 +46,7 @@ Every command supports `--out json` or `--out text`.
 - `--out json` (default) -- machine-readable. Full payload. Use this for scripting.
 - `--out text` -- human-readable one-liner. Use this for eyeballing in Discord or terminal.
 
-**Note:** `status` and `nodes` in text mode fall back to just `OK`. Use `report --out text` for the readable summary. `connect-fav` text mode also falls back to `OK` -- check `report` after if you want confirmation.
+All commands produce useful text in `--out text` mode. `report` is the most detailed; `status` and `nodes` are compact one-liners.
 
 ---
 
@@ -80,25 +80,16 @@ python3 asl-tool.py report --out json
 
 #### `status`
 
-Raw node statistics from the ASL3 agent. Everything the Pi knows about the node.
+Raw node statistics from the ASL3 agent. Text mode gives you a compact one-liner; JSON gives you the full stats block.
+
+```bash
+python3 asl-tool.py status --out text
+# Node 637050 (KJ5IRQ) | Up 37:39:41 | 298 keyups | System ENABLED | Sched ENABLED | Signal NO
+```
 
 ```bash
 python3 asl-tool.py status --out json
-
-# Output includes the full ASL3 stats block:
-# {
-#   "raw_output": [
-#     "Selected system state............................: 0",
-#     "Signal on input..................................: NO",
-#     "Keyups today.....................................: 208",
-#     "TX time today....................................: 01:53:59:896",
-#     "Uptime...........................................: 36:35:07",
-#     ...
-#   ],
-#   "node": "637050",
-#   "callsign": "KJ5IRQ",
-#   "keyups_today": "208"
-# }
+# Full raw_output array with every ASL3 stat, plus parsed node/callsign/keyups_today fields
 ```
 
 #### `nodes`
@@ -106,19 +97,16 @@ python3 asl-tool.py status --out json
 Just the connected node list. Nothing else.
 
 ```bash
-python3 asl-tool.py nodes --out json
-
-# When nodes are connected:
-# {
-#   "connected_nodes": [1999, 2000, 466494, 55553],
-#   "count": 4
-# }
+python3 asl-tool.py nodes --out text
+# 15 nodes: 1883, 1995, 1998, 1999, 3452873, 578250, 578990, 623121, 623122, ...
 
 # When empty:
-# {
-#   "connected_nodes": [],
-#   "count": 0
-# }
+# 0 nodes connected
+```
+
+```bash
+python3 asl-tool.py nodes --out json
+# { "connected_nodes": [...], "count": 15 }
 ```
 
 #### `audit`
@@ -170,22 +158,6 @@ python3 asl-tool.py disconnect 55553 --out text
 # Disconnected from node 55553
 ```
 
-#### `disconnect-all`
-
-**Known issue: this command returns 404.** The `/disconnect_all` endpoint does not exist on the Pi backend yet. Calling it will fail:
-
-```bash
-python3 asl-tool.py disconnect-all --out json
-# {
-#   "detail": "Not Found",
-#   "success": false,
-#   "status": 404,
-#   "output": "Failed to disconnect all nodes"
-# }
-```
-
-Workaround: disconnect nodes individually, or use `net stop` if you started via a net profile.
-
 ---
 
 ### Favorites
@@ -220,10 +192,11 @@ python3 asl-tool.py favorites list --out json
 
 ```bash
 python3 asl-tool.py connect-fav tac --out text
-# OK
+# Connected to tac (node 55553, transceive)
 
-# Add --monitor-only for listen-only:
+# Monitor-only:
 python3 asl-tool.py connect-fav tac --monitor-only --out text
+# Connected to tac (node 55553, monitor)
 ```
 
 #### Remove a favorite
@@ -403,10 +376,8 @@ Override the directory with `ASL_STATE_DIR` if needed.
 
 ## Known Issues
 
-- **`disconnect-all` returns 404.** The backend endpoint is missing on the Pi. Use individual `disconnect` or `net stop` instead.
-- **`status --out text` and `nodes --out text` return just "OK."** They don't have custom text formatting. Use `report --out text` for human output.
-- **`connect-fav --out text` returns "OK."** The favorite connect doesn't pipe through the underlying connect message in text mode. Check with `report` after.
 - **One active net session at a time.** Starting a second `net start` without stopping the first will overwrite the session file.
+- **Nodes may auto-reconnect after disconnect.** If your node's scheduler is configured to maintain certain connections, they'll come right back. Disable the scheduler first if you need them to stay dropped.
 
 ---
 

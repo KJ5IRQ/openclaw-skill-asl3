@@ -12,15 +12,18 @@ New features (phase 2+):
 - watch: poll for connection changes and emit events
 
 Examples:
-  asl-tool.py status
-  asl-tool.py nodes
-  asl-tool.py report
-  asl-tool.py connect 674982
-  asl-tool.py connect 674982 --monitor-only
-  asl-tool.py connect-fav net
+  asl-tool.py status --out text
+  asl-tool.py nodes --out text
+  asl-tool.py report --out text
+  asl-tool.py connect 674982 --out text
+  asl-tool.py connect 674982 --monitor-only --out text
+  asl-tool.py connect-fav net --out text
+  asl-tool.py disconnect 674982 --out text
   asl-tool.py favorites list
   asl-tool.py favorites set net 55553
   asl-tool.py favorites remove net
+  asl-tool.py net start ares --out text
+  asl-tool.py net tick --out text
   asl-tool.py watch --interval 5
 """
 
@@ -125,11 +128,42 @@ def _save_favorites(favs: dict[str, int]) -> None:
 
 
 def cmd_status(_: argparse.Namespace) -> dict:
-    return _req("GET", "/status")
+    out = _req("GET", "/status")
+    raw = out.get("raw_output") or []
+
+    def _find(prefix: str) -> str | None:
+        for line in raw:
+            if isinstance(line, str) and line.strip().startswith(prefix):
+                return line.split(":", 1)[-1].strip()
+        return None
+
+    node = out.get("node", "?")
+    callsign = out.get("callsign", "")
+    uptime = _find("Uptime") or "?"
+    keyups = out.get("keyups_today") or _find("Keyups today") or "?"
+    system = _find("System") or "?"
+    sched = _find("Scheduler") or "?"
+    sig = _find("Signal on input") or "?"
+
+    header = f"Node {node} ({callsign})" if callsign else f"Node {node}"
+    out["output"] = f"{header} | Up {uptime} | {keyups} keyups | System {system} | Sched {sched} | Signal {sig}"
+    return out
 
 
 def cmd_nodes(_: argparse.Namespace) -> dict:
-    return _req("GET", "/nodes")
+    out = _req("GET", "/nodes")
+    connected = out.get("connected_nodes") or []
+    # de-dupe
+    seen: set[str] = set()
+    dedup: list[str] = []
+    for n in connected:
+        val = str(n.get("node", ""))
+        if val and val not in seen:
+            seen.add(val)
+            dedup.append(val)
+    count = len(dedup)
+    out["output"] = f"{count} nodes: {', '.join(dedup)}" if count else "0 nodes connected"
+    return out
 
 
 def cmd_connect(args: argparse.Namespace) -> dict:
@@ -146,23 +180,21 @@ def cmd_connect_fav(args: argparse.Namespace) -> dict:
         return {
             "success": False,
             "error": f"Favorite not found: {args.name}",
+            "output": f"Favorite not found: {args.name}",
             "favorites": favs,
         }
-    body = {"node": str(favs[args.name]), "monitor_only": bool(args.monitor_only)}
+    node = favs[args.name]
+    mode = "monitor" if bool(args.monitor_only) else "transceive"
+    body = {"node": str(node), "monitor_only": bool(args.monitor_only)}
     out = _req("POST", "/connect", json_body=body)
-    out.setdefault("favorite", args.name)
+    out["favorite"] = args.name
+    out.setdefault("output", f"Connected to {args.name} (node {node}, {mode})" if out.get("success", True) else f"Failed to connect to {args.name} (node {node})")
     return out
 
 
 def cmd_disconnect(args: argparse.Namespace) -> dict:
     out = _req("POST", "/disconnect", json_body={"node": str(args.node)})
     out.setdefault("output", f"Disconnected from node {args.node}" if out.get("success", True) else f"Failed to disconnect from node {args.node}")
-    return out
-
-
-def cmd_disconnect_all(_: argparse.Namespace) -> dict:
-    out = _req("POST", "/disconnect_all")
-    out.setdefault("output", "Disconnected all nodes" if out.get("success", True) else "Failed to disconnect all nodes")
     return out
 
 
@@ -555,10 +587,6 @@ def main(argv: list[str]) -> int:
     add_out(sp)
     sp.add_argument("node", type=int, help="Target node number")
     sp.set_defaults(fn=cmd_disconnect)
-
-    sp = sub.add_parser("disconnect-all", help="Drop all connections")
-    add_out(sp)
-    sp.set_defaults(fn=cmd_disconnect_all)
 
     sp = sub.add_parser("audit", help="Read audit log")
     add_out(sp)
